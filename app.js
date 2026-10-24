@@ -175,7 +175,7 @@ function recibo(id){const f=S.fees.find(x=>x.id===id),c=S.clients.find(x=>x.id==
   $('rec').innerHTML=`<div class="recbox"><p class="brand" style="color:var(--cu)">AC Contábil</p><h2>Recibo de honorários</h2><p>Recebi de <b>${esc(c.name)}</b> ${c.doc?'(CPF/CNPJ '+esc(c.doc)+')':''} a quantia de <b>${R(f.value)}</b>, referente a ${esc(f.desc)}.</p><p>Emitido em ${new Date().toLocaleDateString('pt-BR')}.</p><p style="margin-top:44px">______________________________<br>${esc(g.office||(A&&A.name)||'')}${g.crc?'<br>CRC '+esc(g.crc):''}${g.doc?'<br>'+esc(g.doc):''}</p><div class="noprint"><button class="btn" onclick="window.print()">Imprimir ou salvar em PDF</button> <button class="btn alt" onclick="$('rec').style.display='none'">Fechar</button></div></div>`;$('rec').style.display='block'}
 function saveCfg(){S.cfg={office:$('gf').value.trim(),crc:$('gc').value.trim(),doc:$('gd').value.trim(),venc:+$('gv').value||10};save();toast('Configurações salvas')}
 function restaurar(i){const f=i.files[0];if(!f)return;f.text().then(t=>{try{const o=JSON.parse(t);if(!Array.isArray(o.clients))throw 0;S=Object.assign({clients:[],fees:[],tasks:{},prices:{},docs:[],cfg:{}},o);save();render();toast('Cópia restaurada')}catch(e){toast('Arquivo de cópia inválido')}})}
-function enter(){document.body.classList.add('in');$('who').innerHTML=`${esc(A.name)}<br>${esc(A.email)}<br><button class="btn alt sm" onclick="sair()">Sair</button>`;tab='painel';render();window.scrollTo(0,0);toast(saud()+', '+first()+'!')}
+function enter(){document.body.classList.add('in');$('who').innerHTML=`<b class="wn">${esc(A.name)}</b><span class="we">${esc(A.email)}</span><button class="btn alt sm" onclick="sair()">Sair</button>`;tab='painel';render();window.scrollTo(0,0);toast(saud()+(first()?', '+first():'')+'!')}
 
 let last={clients:{},fees:{},docs:{},meta:''},st=null,pendingName='';
 function save(){clearTimeout(st);st=setTimeout(sync,400)}
@@ -191,18 +191,34 @@ async function loadAll(){const F=FB.F;S={clients:[],fees:[],tasks:{},prices:{},d
  const m=await F.getDoc(F.doc(FB.db,'users',A.uid,'meta','main'));
  if(m.exists())Object.assign(S,m.data());last.meta=m.exists()?JSON.stringify({tasks:S.tasks||{},prices:S.prices||{},cfg:S.cfg||{}}):''}
 const ERR={'auth/invalid-credential':'E-mail ou senha incorretos.','auth/wrong-password':'E-mail ou senha incorretos.','auth/user-not-found':'E-mail ou senha incorretos.','auth/email-already-in-use':'Este e-mail já tem cadastro. Use Entrar.','auth/weak-password':'Use uma senha com 8 caracteres ou mais.','auth/too-many-requests':'Muitas tentativas. Aguarde um pouco e tente de novo.','auth/network-request-failed':'Sem conexão com a internet.','auth/operation-not-allowed':'O cadastro está desativado no Firebase.'};
-function showLogin(m){const nw=m==='new';
- $('login').innerHTML=`<div class="lcard" onkeydown="if(event.key==='Enter')entrar('${m}')"><p class="brand" style="color:var(--cu);font-size:56px;text-align:center;margin:0">AC</p><p class="sub" style="text-align:center;color:var(--mute);margin:0 0 16px">CONTÁBIL</p><h2 style="text-align:center">${saud()}!</h2><p class="lead" style="text-align:center">${nw?'Primeiro acesso: crie seu login.':'Entre para acessar seus clientes e guias.'}</p>
- ${nw?'<label>Seu nome<input id="ln" autocomplete="name"></label>':''}<label>E-mail<input id="le" type="email" autocomplete="username"></label><label>Senha<input id="lp" class="pw" type="password" autocomplete="${nw?'new-password':'current-password'}"></label>${nw?'<label>Confirmar senha<input id="lq" class="pw" type="password" autocomplete="new-password"></label>':''}
- <label style="margin:4px 0 8px"><input type="checkbox" style="width:auto;margin:0 6px 0 0" onchange="document.querySelectorAll('.lcard .pw').forEach(i=>i.type=this.checked?'text':'password')">Mostrar senha</label><p id="lerr" class="note" style="color:var(--bad);min-height:20px" role="alert"></p><button class="btn" style="width:100%" onclick="entrar('${m}')">${nw?'Criar acesso':'Entrar'}</button>
- <p class="note" style="text-align:center;margin-top:14px">${nw?'<a href="#" onclick="showLogin(\'in\');return false">Já tenho conta</a>':'<a href="#" onclick="esqueci();return false">Esqueci minha senha</a> · <a href="#" onclick="showLogin(\'new\');return false">Primeiro acesso</a>'}</p></div>`}
-async function entrar(m){const err=t=>{$('lerr').style.color='var(--bad)';$('lerr').textContent=t},e=$('le').value.trim().toLowerCase(),p=$('lp').value;
+function showLogin(m){const nw=m==='new';let em='';try{em=localStorage.getItem('ac-email')||''}catch(x){}
+ $('login').innerHTML=`<div class="lcard" onkeydown="if(event.key==='Enter')entrar('${m}')"><p class="brand" style="color:var(--cu);font-size:56px;text-align:center;margin:0">AC</p><p class="sub" style="text-align:center;color:var(--mute);margin:0 0 16px">CONTÁBIL</p><h2 style="text-align:center">${saud()}!</h2>
+ <div class="seg" role="tablist"><button type="button" role="tab" aria-selected="${!nw}" class="${nw?'':'on'}" onclick="showLogin('in')">Entrar</button><button type="button" role="tab" aria-selected="${nw}" class="${nw?'on':''}" onclick="showLogin('new')">Criar conta</button></div>
+ <p class="lead" style="text-align:center">${nw?'Crie seu acesso para guardar seus clientes na nuvem.':'Entre para acessar seus clientes e guias.'}</p>
+ ${nw?'<label>Seu nome<input id="ln" autocomplete="name" autocapitalize="words" maxlength="60" placeholder="Como devemos te chamar?"></label>':''}<label>E-mail<input id="le" type="email" inputmode="email" autocapitalize="off" spellcheck="false" autocomplete="${nw?'email':'username'}" value="${esc(em)}"></label><label>Senha${nw?' <span class="note">(mínimo 8 caracteres)</span>':''}<input id="lp" class="pw" type="password" autocomplete="${nw?'new-password':'current-password'}"></label>${nw?'<label>Confirmar senha<input id="lq" class="pw" type="password" autocomplete="new-password"></label>':''}
+ <label class="show"><input type="checkbox" onchange="document.querySelectorAll('.lcard .pw').forEach(i=>i.type=this.checked?'text':'password')">Mostrar senha</label><p id="lerr" class="note" style="color:var(--bad);min-height:20px" role="alert"></p><button class="btn" id="lb" style="width:100%" onclick="entrar('${m}')">${nw?'Criar acesso':'Entrar'}</button>
+ ${nw?'':'<p class="note" style="text-align:center;margin-top:14px"><a href="#" onclick="esqueci();return false">Esqueci minha senha</a></p>'}</div>`;
+ if(matchMedia('(hover:hover)').matches)setTimeout(()=>{const f=$(nw?'ln':em?'lp':'le');if(f)f.focus()},0)}
+async function entrar(m){const lb=$('lb'),label=lb.textContent,err=t=>{$('lerr').style.color='var(--bad)';$('lerr').textContent=t},e=$('le').value.trim().toLowerCase(),p=$('lp').value;
  if(!/^\S+@\S+\.\S+$/.test(e))return err('Informe um e-mail válido.');
- try{if(m==='new'){const n=$('ln').value.trim();if(!n)return err('Informe seu nome.');if(p.length<8)return err('A senha precisa ter 8 caracteres ou mais.');if(p!==$('lq').value)return err('As senhas não conferem.');
-  pendingName=n;const cr=await FB.A.createUserWithEmailAndPassword(FB.auth,e,p);await FB.A.updateProfile(cr.user,{displayName:n})}
- else await FB.A.signInWithEmailAndPassword(FB.auth,e,p)}catch(x){err(ERR[x.code]||('Erro: '+(x.code||x.message)))}}
-async function esqueci(){const e=($('le').value||'').trim();if(!e){$('lerr').textContent='Digite seu e-mail acima e clique de novo.';return}
- try{await FB.A.sendPasswordResetEmail(FB.auth,e)}catch(x){}$('lerr').style.color='var(--ok)';$('lerr').textContent='Se o e-mail estiver cadastrado, enviamos o link para redefinir a senha.'}
+ if(!p)return err('Informe sua senha.');
+ const n=m==='new'?$('ln').value.trim().replace(/\s+/g,' '):'';
+ if(m==='new'){if(n.length<2)return err('Informe seu nome.');if(p.length<8)return err('A senha precisa ter 8 caracteres ou mais.');if(p!==$('lq').value)return err('As senhas não conferem.')}
+ err('');lb.disabled=true;lb.textContent='Aguarde…';
+ try{if(m==='new'){pendingName=n;const cr=await FB.A.createUserWithEmailAndPassword(FB.auth,e,p);await FB.A.updateProfile(cr.user,{displayName:n})}
+  else await FB.A.signInWithEmailAndPassword(FB.auth,e,p);
+  try{localStorage.setItem('ac-email',e)}catch(x){}}
+ catch(x){pendingName='';err(ERR[x.code]||('Erro: '+(x.code||x.message)));const b=$('lb');if(b){b.disabled=false;b.textContent=label}}}
+async function esqueci(){const e=($('le').value||'').trim().toLowerCase(),r=$('lerr');
+ if(!/^\S+@\S+\.\S+$/.test(e)){r.style.color='var(--bad)';r.textContent='Digite seu e-mail acima e clique de novo.';return}
+ try{await FB.A.sendPasswordResetEmail(FB.auth,e)}catch(x){}r.style.color='var(--ok)';r.textContent='Se o e-mail estiver cadastrado, enviamos o link para redefinir a senha.'}
+function showName(){$('login').innerHTML=`<div class="lcard" onkeydown="if(event.key==='Enter')salvaNome()"><p class="brand" style="color:var(--cu);font-size:56px;text-align:center;margin:0">AC</p><h2 style="text-align:center">Falta só uma coisa</h2><p class="lead" style="text-align:center">Como devemos te chamar? Seu nome aparece no menu e nas saudações.</p><label>Seu nome<input id="ln" autocomplete="name" autocapitalize="words" maxlength="60"></label><p id="lerr" class="note" style="color:var(--bad);min-height:20px" role="alert"></p><button class="btn" id="lb" style="width:100%" onclick="salvaNome()">Continuar</button><p class="note" style="text-align:center;margin-top:14px">Conectado como ${esc(A.email)} · <a href="#" onclick="sair();return false">Sair</a></p></div>`;
+ setTimeout(()=>{const f=$('ln');if(f)f.focus()},0)}
+async function salvaNome(){const n=$('ln').value.trim().replace(/\s+/g,' '),lb=$('lb');
+ if(n.length<2){$('lerr').textContent='Informe seu nome.';return}
+ lb.disabled=true;lb.textContent='Aguarde…';
+ try{await FB.A.updateProfile(FB.auth.currentUser,{displayName:n});A.name=n;await loadAll();enter()}
+ catch(x){$('lerr').textContent='Não foi possível salvar: '+(x.code||x.message);lb.disabled=false;lb.textContent='Continuar'}}
 async function trocaSenha(){const a=$('p0').value,b=$('p1').value;if(b.length<8)return toast('A nova senha precisa de 8 caracteres ou mais');
  try{const u=FB.auth.currentUser;await FB.A.reauthenticateWithCredential(u,FB.A.EmailAuthProvider.credential(u.email,a));await FB.A.updatePassword(u,b);$('p0').value=$('p1').value='';toast('Senha alterada')}catch(e){toast(e.code==='auth/invalid-credential'||e.code==='auth/wrong-password'?'Senha atual incorreta':'Não foi possível alterar a senha')}}
 function sair(){FB.A.signOut(FB.auth)}
@@ -220,6 +236,7 @@ function enviar(id,via){const d=S.docs.find(x=>x.id===id),c=S.clients.find(x=>x.
 function exportar(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));a.download='ac-contabil-backup.json';a.click()}
 function startApp(){if(String(FB.auth.app.options.apiKey).startsWith('COLE')){$('login').innerHTML='<div class="lcard"><h2>Configure o Firebase</h2><p class="note">Edite public/firebase-config.js com os dados do seu projeto. O passo a passo está no README.</p></div>';return}
  FB.A.onAuthStateChanged(FB.auth,async u=>{if(!u){A=null;S={clients:[],fees:[],tasks:{},prices:{},docs:[],cfg:{}};document.body.classList.remove('in');showLogin('in');return}
-  A={uid:u.uid,name:u.displayName||pendingName||u.email,email:u.email};
+  A={uid:u.uid,name:u.displayName||pendingName||'',email:u.email};
+  if(!A.name){showName();return}
   try{await loadAll();enter()}catch(e){$('login').innerHTML='<div class="lcard"><h2>Não foi possível carregar</h2><p class="note">'+esc(e.code||e.message)+'. Confira as regras do Firestore e a conexão.</p><button class="btn" onclick="sair()">Sair</button></div>'}})}
 window.onFirebaseReady=startApp;if(window.FB)startApp();
