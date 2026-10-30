@@ -27,12 +27,14 @@ let tab='painel',selReg='';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const R=n=>(+n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const RV=n=>S.cfg.hideValues?'••••••':R(n);
 const D=d=>d?d.split('-').reverse().join('/'):'–';
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
 function toast(t){const e=$('toast');e.textContent=t;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),1800)}
 const cname=id=>(S.clients.find(c=>c.id===id)||{name:'(removido)'}).name;
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+let calCursor=new Date(),calSelected=today(),clockTimer=null,weatherCache={city:'',at:0,data:null};
 const PAGTO=['Pix','Boleto','Transferência','Dinheiro','Cartão'],PIXT=[['cpf','CPF'],['cnpj','CNPJ'],['email','E-mail'],['tel','Celular'],['rand','Chave aleatória']];
 const popts=sel=>PAGTO.map(p=>`<option ${p===sel?'selected':''}>${p}</option>`).join('');
 const mesNome=()=>new Date().toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
@@ -49,23 +51,53 @@ function pendRec(){const mes=today().slice(0,7),nome=mesNome();return S.clients.
 function payDef(){const c=S.clients.find(x=>x.id===$('fc').value);if(c&&c.pay)$('fp').value=c.pay}
 function go(t){tab=t;render();window.scrollTo(0,0)}
 function render(){
+  if(clockTimer){clearInterval(clockTimer);clockTimer=null}
   $('nav').innerHTML=TABS.map(([k,l])=>`<button class="${k===tab?'on':''}" onclick="go('${k}')">${l}</button>`).join('');
   $('main').innerHTML=VIEWS[tab]();
+  if(tab==='painel') iniciarPainel();
   if(tab==='guias'){calcMei();calcSn();calcFr()}
   if(tab==='clientes'&&editId)fillEdit();
   labelize()
+}
+function dateKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function calendarEvents(y,m){const ev=[],active=S.clients.filter(c=>c.status!=='Inativo'),mei=active.some(c=>c.type==='MEI'),sn=active.some(c=>c.type==='Simples Nacional'),prefix=y+'-'+String(m+1).padStart(2,'0');
+ S.fees.filter(f=>f.due&&f.due.slice(0,7)===prefix).forEach(f=>ev.push({date:f.due,title:f.paid?'Honorário pago':'Vencimento de honorário',detail:cname(f.client)+' · '+(f.desc||'Honorários')+' · '+RV(f.value),kind:f.paid?'paid':'fee'}));
+ S.docs.filter(d=>d.due&&d.due.slice(0,7)===prefix).forEach(d=>ev.push({date:d.due,title:'Vencimento de documento',detail:cname(d.client)+' · '+d.kind,kind:'doc'}));
+ if(active.length){const das=util(new Date(y,m,20));ev.push({date:dateKey(das),title:'Prazo DAS',detail:'Conferir e pagar guias do mês',kind:'tax'})}
+ if(m===2&&sn)ev.push({date:y+'-03-31',title:'Prazo DEFIS',detail:'Declaração anual do Simples Nacional',kind:'tax'});if(m===4&&mei)ev.push({date:y+'-05-31',title:'Prazo DASN-SIMEI',detail:'Declaração anual do MEI',kind:'tax'});return ev.sort((a,b)=>a.date.localeCompare(b.date))}
+function desenharCalendario(){const m=calCursor.getMonth(),y=calCursor.getFullYear(),head=$('calMonth'),grid=$('calGrid'),dayBox=$('calDay');if(!head||!grid||!dayBox)return;head.textContent=calCursor.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});const ev=calendarEvents(y,m),first=new Date(y,m,1).getDay(),days=new Date(y,m+1,0).getDate(),cells=[];['D','S','T','Q','Q','S','S'].forEach(x=>cells.push(`<span class="calendar-weekday">${x}</span>`));for(let i=0;i<first;i++)cells.push('<span class="calendar-blank"></span>');for(let n=1;n<=days;n++){const k=y+'-'+String(m+1).padStart(2,'0')+'-'+String(n).padStart(2,'0'),count=ev.filter(e=>e.date===k).length;cells.push(`<button class="calendar-date ${k===today()?'is-today':''} ${k===calSelected?'is-selected':''} ${count?'has-events':''}" onclick="selecionarDia('${k}')"><span>${n}</span>${count?`<i>${count}</i>`:''}</button>`)}while(cells.length%7)cells.push('<span class="calendar-blank"></span>');grid.innerHTML=cells.join('');const selected=ev.filter(e=>e.date===calSelected);dayBox.innerHTML=`<div class="calendar-day-head"><b>${new Date(calSelected+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})}</b><span>${selected.length} compromisso(s)</span></div>${selected.length?selected.map(e=>`<div class="calendar-event ${e.kind}"><i></i><span><b>${esc(e.title)}</b><small>${esc(e.detail)}</small></span></div>`).join(''):'<p class="empty">Nenhum vencimento cadastrado neste dia.</p>'}`}
+function moverCalendario(delta){calCursor=new Date(calCursor.getFullYear(),calCursor.getMonth()+delta,1);calSelected=dateKey(calCursor);desenharCalendario()}
+function selecionarDia(k){calSelected=k;desenharCalendario()}
+function iniciarPainel(){const tick=()=>{const d=new Date(),t=$('dashTime'),z=$('dashTimezone');if(t)t.textContent=d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});if(z)z.textContent=Intl.DateTimeFormat().resolvedOptions().timeZone.replaceAll('_',' ')};tick();clockTimer=setInterval(tick,1000);desenharCalendario();carregarClima()}
+function alternarValores(){S.cfg.hideValues=!S.cfg.hideValues;save();render()}
+function weatherLabel(c){return c===0?'Céu limpo':c<=3?'Parcialmente nublado':c===45||c===48?'Neblina':c<=57?'Garoa':c<=67?'Chuva':c<=77?'Neve':c<=82?'Pancadas de chuva':c<=86?'Neve forte':c>=95?'Trovoadas':'Condições variáveis'}
+function weatherIcon(c,day){if(c===0)return day?'☀️':'🌙';if(c<=3)return '🌤️';if(c===45||c===48)return '🌫️';if(c<=67||c<=82)return '🌧️';if(c<=86)return '🌨️';if(c>=95)return '⛈️';return '☁️'}
+function mostrarClima(d,city){const box=$('dashWeather');if(!box)return;box.innerHTML=`<div class="weather-top"><span class="weather-icon">${weatherIcon(d.code,d.day)}</span><span class="weather-temp">${Math.round(d.temp)}°</span></div><b class="weather-condition">${weatherLabel(d.code)}</b><span class="weather-place">${esc(city)}</span><div class="weather-stats"><span>Sensação <b>${Math.round(d.feels)}°</b></span><span>Umidade <b>${Math.round(d.humidity)}%</b></span></div><small class="weather-source">Previsão por Open-Meteo · <button onclick="carregarClima(true)">Atualizar</button></small>`}
+async function buscarClimaJson(url){const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);try{const response=await fetch(url,{signal:controller.signal});if(!response.ok)throw new Error('network');return await response.json()}finally{clearTimeout(timeout)}}
+async function carregarClima(force=false){
+ const box=$('dashWeather');if(!box)return;const city=(S.cfg.weatherCity||'').trim();
+ if(!city){box.innerHTML=`<span class="weather-icon">🌤️</span><b class="weather-condition">Clima local</b><span class="weather-place">Configure sua cidade</span><button class="btn alt sm" onclick="go('config')">Configurar cidade</button>`;return}
+ const key=city.toLocaleLowerCase('pt-BR');if(!force&&weatherCache.city===key&&Date.now()-weatherCache.at<600000){mostrarClima(weatherCache.data,weatherCache.name);return}
+ box.innerHTML='<span class="weather-loading">Buscando previsão…</span>';
+ try{
+  const parts=city.split(','),cityName=parts[0].trim(),hint=noAcc(parts.slice(1).join(',')),ufs={AC:'ACRE',AL:'ALAGOAS',AP:'AMAPA',AM:'AMAZONAS',BA:'BAHIA',CE:'CEARA',DF:'DISTRITO FEDERAL',ES:'ESPIRITO SANTO',GO:'GOIAS',MA:'MARANHAO',MT:'MATO GROSSO',MS:'MATO GROSSO DO SUL',MG:'MINAS GERAIS',PA:'PARA',PB:'PARAIBA',PR:'PARANA',PE:'PERNAMBUCO',PI:'PIAUI',RJ:'RIO DE JANEIRO',RN:'RIO GRANDE DO NORTE',RS:'RIO GRANDE DO SUL',RO:'RONDONIA',RR:'RORAIMA',SC:'SANTA CATARINA',SP:'SAO PAULO',SE:'SERGIPE',TO:'TOCANTINS'},stateHint=ufs[hint]||hint;
+  const geocoding=await buscarClimaJson('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(cityName)+'&count=10&language=pt&format=json'),results=geocoding.results||[],br=results.filter(x=>x.country_code==='BR');
+  const loc=(stateHint?br.find(x=>x.admin1&&(noAcc(x.admin1).includes(stateHint)||stateHint.includes(noAcc(x.admin1)))):null)||br[0]||results[0];if(!loc)throw new Error('city');
+  const forecast=await buscarClimaJson('https://api.open-meteo.com/v1/forecast?latitude='+loc.latitude+'&longitude='+loc.longitude+'&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,is_day&timezone=auto'),cur=forecast.current;if(!cur)throw new Error('weatherdata');
+  const data={temp:cur.temperature_2m,feels:cur.apparent_temperature,humidity:cur.relative_humidity_2m,code:cur.weather_code,day:cur.is_day};weatherCache={city:key,at:Date.now(),name:[loc.name,loc.admin1].filter(Boolean).join(' · '),data};mostrarClima(data,weatherCache.name)
+ }catch(e){const msg=e.message==='city'?'Cidade não encontrada. Informe município e UF em Configurações.':e.message==='weatherdata'?'O serviço não retornou a previsão. Tente novamente.':'Sem conexão com o serviço de clima. Tente novamente em instantes.';box.innerHTML=`<span class="weather-icon">🌥️</span><b class="weather-condition">Previsão indisponível</b><span class="weather-place">${msg}</span><button class="btn alt sm" onclick="carregarClima(true)">Tentar novamente</button>`}
 }
 const VIEWS={
 painel(){
   const open=S.fees.filter(f=>!f.paid),rec=S.fees.filter(f=>f.paid);
   const late=open.filter(f=>f.due&&f.due<today());
   const mrr=S.clients.filter(c=>c.status!=='Inativo').reduce((a,c)=>a+(+c.fee||0),0);
-  return `<h2>${saud()}, ${esc(first())}!</h2><p class="lead">${new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})}. Organização, planejamento e resultados.</p>
+  return `<div class="dash-welcome"><div><span class="dash-kicker">PAINEL DE CONTROLE</span><h2>${saud()}, ${esc(first())}!</h2><p class="lead">${new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p><div class="dash-clock"><span id="dashTime">--:--:--</span><span id="dashTimezone"></span></div><button class="btn alt sm value-toggle" onclick="alternarValores()">${S.cfg.hideValues?'◉ Mostrar valores':'◉ Ocultar valores'}</button></div><div class="dash-weather" id="dashWeather"><span class="weather-loading">Carregando clima…</span></div></div>
   <div class="kpis"><div class="kpi"><b>${S.clients.filter(c=>c.status!=='Inativo').length}</b><span>clientes ativos</span></div>
-  <div class="kpi"><b>${R(mrr)}</b><span>honorários mensais previstos</span></div>
-  <div class="kpi"><b>${R(open.reduce((a,f)=>a+ +f.value,0))}</b><span>a receber (${open.length})</span></div>
-  <div class="kpi"><b>${R(rec.reduce((a,f)=>a+ +f.value,0))}</b><span>já recebido</span></div></div>
-  ${prazos()}<div class="panel"><h3>Cobranças em atraso</h3>${late.length?`<table class="tbl">${late.map(f=>`<tr><td>${esc(cname(f.client))}</td><td>${esc(f.desc)}</td><td>${D(f.due)}</td><td>${R(f.value)}</td></tr>`).join('')}</table>`:'<p class="empty">Nenhuma cobrança em atraso.</p>'}</div>
+  <div class="kpi"><b>${RV(mrr)}</b><span>honorários mensais previstos</span></div>
+  <div class="kpi"><b>${RV(open.reduce((a,f)=>a+ +f.value,0))}</b><span>a receber (${open.length})</span></div>
+  <div class="kpi"><b>${RV(rec.reduce((a,f)=>a+ +f.value,0))}</b><span>já recebido</span></div></div>
+  <div class="dash-grid"><section class="panel dash-calendar"><div class="calendar-title"><div><span class="dash-kicker">AGENDA</span><h3>Calendário</h3></div><div class="calendar-nav"><button class="btn alt sm" aria-label="Mês anterior" onclick="moverCalendario(-1)">‹</button><b id="calMonth"></b><button class="btn alt sm" aria-label="Próximo mês" onclick="moverCalendario(1)">›</button></div></div><div id="calGrid" class="calendar-grid"></div><div id="calDay" class="calendar-day"></div></section><div class="dash-agenda">${prazos()}<div class="panel"><h3>Cobranças em atraso</h3>${late.length?`<div class="late-list">${late.slice(0,5).map(f=>`<div class="late-item"><span><b>${esc(cname(f.client))}</b><small>${esc(f.desc)} · venc. ${D(f.due)}</small></span><strong>${RV(f.value)}</strong></div>`).join('')}</div>`:'<p class="empty">Nenhuma cobrança em atraso.</p>'}</div></div></div>
   <div class="panel"><h3>Comece por aqui</h3><p class="note">Cadastre um cliente em <b>Clientes</b>, lance os honorários em <b>Honorários</b> e calcule o DAS em <b>Guias e impostos</b>. Os dados ficam salvos na nuvem (Firebase), com acesso por e-mail e senha.</p>
   <button class="btn alt sm" onclick="exportar()">Baixar cópia de segurança</button></div>`},
 nfse(){
@@ -121,7 +153,7 @@ guias(){
   <div class="panel"><h3>Fator R (Anexo III ou V)</h3><div class="row"><label>Folha 12 meses: salários, pró-labore e encargos (R$)<input id="fr1" type="number" min="0" value="60000" oninput="calcFr()"></label><label>RBT12 (R$)<input id="fr2" type="number" min="0" value="180000" oninput="calcFr()"></label></div><div class="res" id="frres"></div><p class="note">Com Fator R de 28% ou mais, a empresa tributa pelo Anexo III. Abaixo disso, pelo Anexo V. Vale para atividades sujeitas ao Fator R, como serviços de saúde e intelectuais.</p></div>`},
 config(){const g=S.cfg;
   return `<h2>Configurações</h2><p class="lead">Dados do escritório, acesso e cópia de segurança.</p>
-  <div class="panel"><h3>Escritório</h3><div class="row"><label>Nome no recibo<input id="gf" value="${esc(g.office||'')}" placeholder="Ana Carolina Contabilidade"></label><label>CRC<input id="gc" value="${esc(g.crc||'')}"></label><label>CPF ou CNPJ<input id="gd" value="${esc(g.doc||'')}"></label><label>Dia padrão de vencimento<input id="gv" type="number" min="1" max="28" value="${esc(g.venc||10)}"></label></div><button class="btn" onclick="saveCfg()">Salvar</button></div>
+  <div class="panel"><h3>Escritório e painel inicial</h3><div class="row"><label>Nome no recibo<input id="gf" value="${esc(g.office||'')}" placeholder="Ana Carolina Contabilidade"></label><label>CRC<input id="gc" value="${esc(g.crc||'')}"></label><label>CPF ou CNPJ<input id="gd" value="${esc(g.doc||'')}"></label><label>Dia padrão de vencimento<input id="gv" type="number" min="1" max="28" value="${esc(g.venc||10)}"></label><label>Cidade para mostrar o clima<input id="gwc" value="${esc(g.weatherCity||'')}" placeholder="Ex.: Pato Branco, PR"></label></div><p class="note">A previsão é consultada pela internet ao abrir o Painel. Informe somente a cidade, sem endereço.</p><button class="btn" onclick="saveCfg()">Salvar</button></div>
   <div class="panel"><h3>Recebimento (Pix e outras formas)</h3><p class="note" style="margin:0 0 12px">A chave Pix vai na mensagem de cobrança do WhatsApp, junto com o código Pix copia e cola já com o valor.</p><div class="row"><label>Tipo da chave<select id="xt">${PIXT.map(([k,l])=>`<option value="${k}" ${g.pixT===k?'selected':''}>${l}</option>`).join('')}</select></label><label>Chave Pix<input id="xk" autocomplete="off" value="${esc(g.pix||'')}"></label><label>Nome do beneficiário<input id="xn" maxlength="25" value="${esc(g.pixName||'')}" placeholder="${esc(g.office||'Como aparece no banco')}"></label><label>Cidade<input id="xc" maxlength="15" value="${esc(g.pixCity||'')}"></label></div><label style="margin-bottom:12px">Outras formas (dados bancários, link de boleto)<input id="xi" value="${esc(g.payInfo||'')}" placeholder="Ex.: Banco, agência e conta"></label><button class="btn" onclick="savePix()">Salvar recebimento</button></div>
   <div class="panel"><h3>Alterar senha</h3><div class="row"><label>Senha atual<input id="p0" type="password" autocomplete="current-password"></label><label>Nova senha (mínimo 8 caracteres)<input id="p1" type="password" autocomplete="new-password"></label></div><button class="btn" onclick="trocaSenha()">Alterar senha</button></div>
   <div class="panel"><h3>Cópia de segurança</h3><p class="note">Guarda clientes, honorários, regularização e a lista de documentos. Os PDFs em si não são guardados aqui, só o registro e o link.</p><div class="actions"><button class="btn alt" onclick="exportar()">Baixar cópia</button><label class="btn alt filebtn">Restaurar cópia<input type="file" accept=".json,application/json" onchange="restaurar(this)"></label></div><p class="note" style="margin:10px 0 0">Restaurar substitui os dados atuais pelos do arquivo escolhido.</p></div>`},
@@ -216,7 +248,7 @@ function gerarMes(){const mes=today().slice(0,7),nome=mesNome(),k=pendRec();
   save();render();toast(k.length?k.length+' honorário(s) gerado(s)':'Nada novo para gerar')}
 function recibo(id){const f=S.fees.find(x=>x.id===id),c=S.clients.find(x=>x.id===f.client)||{},g=S.cfg;
   $('rec').innerHTML=`<div class="recbox"><p class="brand" style="color:var(--cu)">AC Contábil</p><h2>Recibo de honorários</h2><p>Recebi de <b>${esc(c.name)}</b> ${c.doc?'(CPF/CNPJ '+esc(c.doc)+')':''} a quantia de <b>${R(f.value)}</b>, referente a ${esc(f.desc)}.${f.pay?' Forma de pagamento: '+esc(f.pay)+'.':''}</p><p>Emitido em ${new Date().toLocaleDateString('pt-BR')}.</p><p style="margin-top:44px">______________________________<br>${esc(g.office||(A&&A.name)||'')}${g.crc?'<br>CRC '+esc(g.crc):''}${g.doc?'<br>'+esc(g.doc):''}</p><div class="noprint"><button class="btn" onclick="window.print()">Imprimir ou salvar em PDF</button> <button class="btn alt" onclick="$('rec').style.display='none'">Fechar</button></div></div>`;$('rec').style.display='block'}
-function saveCfg(){Object.assign(S.cfg,{office:$('gf').value.trim(),crc:$('gc').value.trim(),doc:$('gd').value.trim(),venc:+$('gv').value||10});save();toast('Configurações salvas')}
+function saveCfg(){Object.assign(S.cfg,{office:$('gf').value.trim(),crc:$('gc').value.trim(),doc:$('gd').value.trim(),venc:+$('gv').value||10,weatherCity:$('gwc').value.trim()});save();toast('Configurações salvas')}
 function savePix(){const t=$('xt').value,k=$('xk').value.trim(),d=k.replace(/\D/g,'');
  const ok=!k||(t==='cpf'?d.length===11:t==='cnpj'?d.length===14:t==='tel'?d.length>=10&&d.length<=13:t==='email'?/^\S+@\S+\.\S+$/.test(k):k.length>=32);
  if(!ok)return toast('Chave Pix inválida para o tipo escolhido');
