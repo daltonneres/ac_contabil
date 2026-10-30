@@ -32,7 +32,21 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
 function toast(t){const e=$('toast');e.textContent=t;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),1800)}
 const cname=id=>(S.clients.find(c=>c.id===id)||{name:'(removido)'}).name;
-const today=()=>new Date().toISOString().slice(0,10);
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const PAGTO=['Pix','Boleto','Transferência','Dinheiro','Cartão'],PIXT=[['cpf','CPF'],['cnpj','CNPJ'],['email','E-mail'],['tel','Celular'],['rand','Chave aleatória']];
+const popts=sel=>PAGTO.map(p=>`<option ${p===sel?'selected':''}>${p}</option>`).join('');
+const mesNome=()=>new Date().toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+const noAcc=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9 ]/g,' ').replace(/\s+/g,' ').trim().toUpperCase();
+function pixKey(){const g=S.cfg,k=(g.pix||'').trim();if(!k)return '';const d=k.replace(/\D/g,'');
+ if(g.pixT==='cpf'||g.pixT==='cnpj')return d;if(g.pixT==='tel')return '+'+(d.startsWith('55')&&d.length>11?d:'55'+d);if(g.pixT==='email')return k.toLowerCase();return k}
+const tlv=(i,v)=>i+String(v.length).padStart(2,'0')+v;
+function crc16(t){let c=0xFFFF;for(let i=0;i<t.length;i++){c^=t.charCodeAt(i)<<8;for(let j=0;j<8;j++)c=c&0x8000?((c<<1)^0x1021)&0xFFFF:(c<<1)&0xFFFF}return c.toString(16).toUpperCase().padStart(4,'0')}
+function pixCode(v){const k=pixKey();if(!k)return '';const g=S.cfg,nome=noAcc(g.pixName||g.office).slice(0,25)||'BENEFICIARIO',cid=noAcc(g.pixCity).slice(0,15)||'BRASIL';
+ const p=tlv('00','01')+tlv('01','11')+tlv('26',tlv('00','br.gov.bcb.pix')+tlv('01',k))+tlv('52','0000')+tlv('53','986')+(+v>0?tlv('54',(+v).toFixed(2)):'')+tlv('58','BR')+tlv('59',nome)+tlv('60',cid)+tlv('62',tlv('05','***'))+'6304';return p+crc16(p)}
+function copiaPix(id){const f=S.fees.find(x=>x.id===id);if(!pixKey()){toast('Cadastre sua chave Pix em Configurações');return go('config')}
+ const t=pixCode(f.value);(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('Pix copia e cola copiado'),()=>prompt('Copie o código Pix:',t))}
+function pendRec(){const mes=today().slice(0,7),nome=mesNome();return S.clients.filter(c=>c.status!=='Inativo'&&c.rec!=='avulsa'&&+c.fee>0&&!S.fees.some(f=>f.client===c.id&&(f.mes===mes||f.desc==='Honorários '+nome)))}
+function payDef(){const c=S.clients.find(x=>x.id===$('fc').value);if(c&&c.pay)$('fp').value=c.pay}
 function go(t){tab=t;render();window.scrollTo(0,0)}
 function render(){
   $('nav').innerHTML=TABS.map(([k,l])=>`<button class="${k===tab?'on':''}" onclick="go('${k}')">${l}</button>`).join('');
@@ -60,17 +74,19 @@ clientes(){
   <label>Nome / Razão social<input id="cn"></label><label>CPF ou CNPJ<input id="cd"></label>
   <label>Regime<select id="ct"><option>MEI</option><option>Simples Nacional</option><option>Outro</option></select></label>
   <label>WhatsApp<input id="cp" placeholder="(46) 9...."></label><label>E-mail<input id="ce" type="email"></label>
-  <label>Honorário mensal (R$)<input id="cf" type="number" min="0" step="0.01"></label></div>
+  <label>Honorário (R$)<input id="cf" type="number" min="0" step="0.01"></label>
+  <label>Cobrança<select id="cr"><option value="mensal">Mensal (recorrente)</option><option value="avulsa">Avulsa</option></select></label><label>Forma de pagamento<select id="cm">${popts('Pix')}</select></label><label>Dia do vencimento<input id="cv" type="number" min="1" max="28" placeholder="Padrão: ${esc(S.cfg.venc||10)}"></label></div>
   <button class="btn" onclick="addClient()">Salvar cliente</button></div>
-  ${BUSCA}<div class="panel wrap">${S.clients.length?`<table class="tbl"><tr><th>Nome</th><th>Documento</th><th>Regime</th><th>Honorário</th><th>Contato</th><th></th></tr>${S.clients.map(c=>`<tr><td>${esc(c.name)} ${c.status==='Inativo'?'<span class="tag">Inativo</span>':''}</td><td>${esc(c.doc)}</td><td><span class="tag">${esc(c.type)}</span></td><td>${R(c.fee)}</td><td>${esc(c.phone)} ${esc(c.email)}</td><td style="white-space:nowrap"><button class="btn alt sm" onclick="editId='${c.id}';render();window.scrollTo(0,0)">Editar</button> <button class="btn alt sm" onclick="togCli('${c.id}')">${c.status==='Inativo'?'Ativar':'Inativar'}</button> <button class="btn alt sm" onclick="delClient('${c.id}')">Excluir</button></td></tr>`).join('')}</table>`:'<p class="empty">Nenhum cliente ainda. Preencha o formulário acima para cadastrar o primeiro.</p>'}</div>`},
+  ${BUSCA}<div class="panel wrap">${S.clients.length?`<table class="tbl"><tr><th>Nome</th><th>Documento</th><th>Regime</th><th>Honorário</th><th>Contato</th><th></th></tr>${S.clients.map(c=>`<tr><td>${esc(c.name)} ${c.status==='Inativo'?'<span class="tag">Inativo</span>':''}</td><td>${esc(c.doc)}</td><td><span class="tag">${esc(c.type)}</span></td><td>${R(c.fee)}${+c.fee>0?`<div class="note">${c.rec==='avulsa'?'Avulsa':'Mensal'} · ${esc(c.pay||'Pix')}${c.payday?' · dia '+esc(c.payday):''}</div>`:''}</td><td>${esc(c.phone)} ${esc(c.email)}</td><td style="white-space:nowrap"><button class="btn alt sm" onclick="editId='${c.id}';render();window.scrollTo(0,0)">Editar</button> <button class="btn alt sm" onclick="togCli('${c.id}')">${c.status==='Inativo'?'Ativar':'Inativar'}</button> <button class="btn alt sm" onclick="delClient('${c.id}')">Excluir</button></td></tr>`).join('')}</table>`:'<p class="empty">Nenhum cliente ainda. Preencha o formulário acima para cadastrar o primeiro.</p>'}</div>`},
 honorarios(){
   const opts=S.clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
   return `<h2>Honorários</h2><p class="lead">Lance cobranças, acompanhe pagamentos e envie lembretes.</p>
-  <div class="panel"><div class="row"><label>Cliente<select id="fc">${opts||'<option value="">Cadastre um cliente antes</option>'}</select></label>
+  ${pendRec().length?`<div class="panel"><p class="note" style="margin:0 0 10px"><b>${pendRec().length}</b> cobrança(s) recorrente(s) de ${mesNome()} ainda não lançada(s): ${pendRec().map(c=>esc(c.name)).join(', ')}.</p><button class="btn" onclick="gerarMes()">Gerar agora</button></div>`:''}
+  <div class="panel"><div class="row"><label>Cliente<select id="fc" onchange="payDef()">${opts||'<option value="">Cadastre um cliente antes</option>'}</select></label>
   <label>Descrição<input id="fd" placeholder="Honorário de ${new Date().toLocaleDateString('pt-BR',{month:'long'})}"></label>
-  <label>Valor (R$)<input id="fv" type="number" min="0" step="0.01"></label><label>Vencimento<input id="fw" type="date"></label></div>
+  <label>Valor (R$)<input id="fv" type="number" min="0" step="0.01"></label><label>Vencimento<input id="fw" type="date"></label><label>Forma de pagamento<select id="fp">${popts((S.clients[0]||{}).pay||'Pix')}</select></label></div>
   <button class="btn" onclick="addFee()">Lançar honorário</button> <button class="btn alt" onclick="gerarMes()">Gerar honorários do mês</button></div>
-  ${BUSCA}<div class="panel wrap">${S.fees.length?`<table class="tbl"><tr><th>Cliente</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Situação</th><th></th></tr>${S.fees.slice().reverse().map(f=>{const late=!f.paid&&f.due&&f.due<today();return `<tr><td>${esc(cname(f.client))}</td><td>${esc(f.desc)}</td><td>${D(f.due)}</td><td>${R(f.value)}</td><td><span class="tag ${f.paid?'ok':late?'bad':''}">${f.paid?'Pago':late?'Atrasado':'Pendente'}</span></td><td style="white-space:nowrap"><button class="btn alt sm" onclick="togFee('${f.id}')">${f.paid?'Reabrir':'Dar baixa'}</button> <button class="btn alt sm" onclick="zap('${f.id}')">WhatsApp</button>${f.paid?` <button class="btn alt sm" onclick="recibo('${f.id}')">Recibo</button>`:''} <button class="btn alt sm" onclick="delFee('${f.id}')">×</button></td></tr>`}).join('')}</table>`:'<p class="empty">Sem honorários lançados.</p>'}</div>`},
+  ${BUSCA}<div class="panel wrap">${S.fees.length?`<table class="tbl"><tr><th>Cliente</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Situação</th><th></th></tr>${S.fees.slice().reverse().map(f=>{const late=!f.paid&&f.due&&f.due<today();return `<tr><td>${esc(cname(f.client))}</td><td>${esc(f.desc)}${f.pay?`<div class="note">${esc(f.pay)}${f.rec?' · recorrente':''}</div>`:''}</td><td>${D(f.due)}</td><td>${R(f.value)}</td><td><span class="tag ${f.paid?'ok':late?'bad':''}">${f.paid?'Pago':late?'Atrasado':'Pendente'}</span></td><td style="white-space:nowrap"><button class="btn alt sm" onclick="togFee('${f.id}')">${f.paid?'Reabrir':'Dar baixa'}</button> <button class="btn alt sm" onclick="zap('${f.id}')">WhatsApp</button>${!f.paid&&f.pay==='Pix'?` <button class="btn alt sm" onclick="copiaPix('${f.id}')">Copiar Pix</button>`:''}${f.paid?` <button class="btn alt sm" onclick="recibo('${f.id}')">Recibo</button>`:''} <button class="btn alt sm" onclick="delFee('${f.id}')">×</button></td></tr>`}).join('')}</table>`:'<p class="empty">Sem honorários lançados.</p>'}</div>`},
 guias(){
   return `<h2>Guias e impostos</h2><p class="lead">Calcule o valor e a data, emita a guia no portal oficial e anexe o PDF para enviar ao cliente.</p>${cliSel()}
   <div class="panel"><h3>DAS do MEI</h3><div class="row">
@@ -89,8 +105,9 @@ guias(){
 config(){const g=S.cfg;
   return `<h2>Configurações</h2><p class="lead">Dados do escritório, acesso e cópia de segurança.</p>
   <div class="panel"><h3>Escritório</h3><div class="row"><label>Nome no recibo<input id="gf" value="${esc(g.office||'')}" placeholder="Ana Carolina Contabilidade"></label><label>CRC<input id="gc" value="${esc(g.crc||'')}"></label><label>CPF ou CNPJ<input id="gd" value="${esc(g.doc||'')}"></label><label>Dia padrão de vencimento<input id="gv" type="number" min="1" max="28" value="${esc(g.venc||10)}"></label></div><button class="btn" onclick="saveCfg()">Salvar</button></div>
+  <div class="panel"><h3>Recebimento (Pix e outras formas)</h3><p class="note" style="margin:0 0 12px">A chave Pix vai na mensagem de cobrança do WhatsApp, junto com o código Pix copia e cola já com o valor.</p><div class="row"><label>Tipo da chave<select id="xt">${PIXT.map(([k,l])=>`<option value="${k}" ${g.pixT===k?'selected':''}>${l}</option>`).join('')}</select></label><label>Chave Pix<input id="xk" autocomplete="off" value="${esc(g.pix||'')}"></label><label>Nome do beneficiário<input id="xn" maxlength="25" value="${esc(g.pixName||'')}" placeholder="${esc(g.office||'Como aparece no banco')}"></label><label>Cidade<input id="xc" maxlength="15" value="${esc(g.pixCity||'')}"></label></div><label style="margin-bottom:12px">Outras formas (dados bancários, link de boleto)<input id="xi" value="${esc(g.payInfo||'')}" placeholder="Ex.: Banco, agência e conta"></label><button class="btn" onclick="savePix()">Salvar recebimento</button></div>
   <div class="panel"><h3>Alterar senha</h3><div class="row"><label>Senha atual<input id="p0" type="password" autocomplete="current-password"></label><label>Nova senha (mínimo 8 caracteres)<input id="p1" type="password" autocomplete="new-password"></label></div><button class="btn" onclick="trocaSenha()">Alterar senha</button></div>
-  <div class="panel"><h3>Cópia de segurança</h3><p class="note">Guarda clientes, honorários, regularização e a lista de documentos. Os PDFs em si não são guardados aqui, só o registro e o link.</p><button class="btn alt" onclick="exportar()">Baixar cópia</button><label style="margin-top:12px">Restaurar uma cópia<input type="file" accept=".json" onchange="restaurar(this)"></label></div>`},
+  <div class="panel"><h3>Cópia de segurança</h3><p class="note">Guarda clientes, honorários, regularização e a lista de documentos. Os PDFs em si não são guardados aqui, só o registro e o link.</p><div class="actions"><button class="btn alt" onclick="exportar()">Baixar cópia</button><label class="btn alt filebtn">Restaurar cópia<input type="file" accept=".json,application/json" onchange="restaurar(this)"></label></div><p class="note" style="margin:10px 0 0">Restaurar substitui os dados atuais pelos do arquivo escolhido.</p></div>`},
 docs(){const rows=S.docs.slice().reverse();
   return `<h2>Documentos</h2><p class="lead">Registro das guias e comprovantes emitidos nos portais, por cliente, com a mensagem pronta para enviar.</p>
   <div class="panel"><h3>Registrar documento</h3>${attach('d','DAS MEI')}</div>
@@ -118,15 +135,18 @@ servicos(){
   <div class="panel">${como(2,'Como abrir um MEI, passo a passo')}${como(3,'Como parcelar DAS em atraso')}</div><p class="note">Os três últimos itens também servem para atender outros escritórios contábeis como prestadora de serviços.</p>`}
 };
 function addClient(){const name=$('cn').value.trim();if(!name)return toast('Informe o nome do cliente');
-  const o={name,doc:$('cd').value,type:$('ct').value,phone:$('cp').value,email:$('ce').value,fee:+$('cf').value||0};
+  const o={name,doc:$('cd').value,type:$('ct').value,phone:$('cp').value,email:$('ce').value,fee:+$('cf').value||0,rec:$('cr').value,pay:$('cm').value,payday:+$('cv').value||''};
   if(editId){Object.assign(S.clients.find(c=>c.id===editId),o);editId=''}else S.clients.push(Object.assign({id:uid(),status:'Ativo'},o));save();render();toast('Cliente salvo')}
 function delClient(id){if(!confirm('Excluir este cliente e seus honorários?'))return;S.clients=S.clients.filter(c=>c.id!==id);S.fees=S.fees.filter(f=>f.client!==id);save();render()}
 function addFee(){const c=$('fc').value,v=+$('fv').value;if(!c||!v)return toast('Escolha o cliente e informe o valor');
-  S.fees.push({id:uid(),client:c,desc:$('fd').value||'Honorários',value:v,due:$('fw').value,paid:false});save();render();toast('Honorário lançado')}
+  S.fees.push({id:uid(),client:c,desc:$('fd').value||'Honorários',value:v,due:$('fw').value,paid:false,pay:$('fp').value});save();render();toast('Honorário lançado')}
 function togFee(id){const f=S.fees.find(x=>x.id===id);f.paid=!f.paid;save();render()}
 function delFee(id){S.fees=S.fees.filter(f=>f.id!==id);save();render()}
 function zap(id){const f=S.fees.find(x=>x.id===id),c=S.clients.find(x=>x.id===f.client)||{};
-  const m=`Olá, ${c.name||''}! Passando para lembrar do honorário "${f.desc}" no valor de ${R(f.value)}, com vencimento em ${D(f.due)}. Qualquer dúvida, estou à disposição. – AC Contábil`;
+  const pay=f.pay||c.pay||'Pix',g=S.cfg;let ex='';
+  if(pay==='Pix'&&pixKey())ex=`\n\nPagamento via Pix\nChave: ${g.pix}\nCopia e cola:\n${pixCode(f.value)}`;
+  else if(pay!=='Pix')ex=`\n\nForma de pagamento: ${pay}${g.payInfo?'\n'+g.payInfo:''}`;
+  const m=`Olá, ${c.name||''}! Passando para lembrar do honorário "${f.desc}" no valor de ${R(f.value)}, com vencimento em ${D(f.due)}.${ex}\n\nQualquer dúvida, estou à disposição. – AC Contábil`;
   const n=(c.phone||'').replace(/\D/g,'');window.open('https://wa.me/'+(n&&n.length<=11?'55'+n:n)+'?text='+encodeURIComponent(m),'_blank','noopener')}
 function cobrar(i){if(!S.clients.length){toast('Cadastre um cliente primeiro');return go('clientes')}
   tab='honorarios';render();$('fd').value=SERV[i][0];$('fv').value=S.prices[i]??SERV[i][1];$('fw').focus()}
@@ -157,7 +177,7 @@ const first=()=>((A&&A.name)||'').split(' ')[0];
 function prevMes(){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
 function labelize(){document.querySelectorAll('#main .tbl').forEach(t=>{const h=[...t.querySelectorAll('th')].map(x=>x.textContent);t.querySelectorAll('tr').forEach(r=>[...r.querySelectorAll('td')].forEach((d,i)=>d.dataset.l=h[i]||''))})}
 function filtra(v){v=v.toLowerCase();document.querySelectorAll('#main .tbl tr').forEach(r=>{if(r.querySelector('th'))return;r.style.display=r.textContent.toLowerCase().includes(v)?'':'none'})}
-function fillEdit(){const c=S.clients.find(x=>x.id===editId);if(!c)return;$('cn').value=c.name;$('cd').value=c.doc||'';$('ct').value=c.type;$('cp').value=c.phone||'';$('ce').value=c.email||'';$('cf').value=c.fee||'';document.querySelector('#main .panel .btn').textContent='Salvar alterações'}
+function fillEdit(){const c=S.clients.find(x=>x.id===editId);if(!c)return;$('cn').value=c.name;$('cd').value=c.doc||'';$('ct').value=c.type;$('cp').value=c.phone||'';$('ce').value=c.email||'';$('cf').value=c.fee||'';$('cr').value=c.rec||'mensal';$('cm').value=c.pay||'Pix';$('cv').value=c.payday||'';document.querySelector('#main .panel .btn').textContent='Salvar alterações'}
 function togCli(id){const c=S.clients.find(x=>x.id===id);c.status=c.status==='Inativo'?'Ativo':'Inativo';save();render()}
 function prox(m,d){const n=new Date(),n0=new Date(n.getFullYear(),n.getMonth(),n.getDate());let t=new Date(n.getFullYear(),m,d);if(t<n0)t=new Date(n.getFullYear()+1,m,d);return t}
 function util(t){const w=t.getDay();if(w===6)t.setDate(t.getDate()+2);if(w===0)t.setDate(t.getDate()+1);return t}
@@ -169,12 +189,17 @@ function prazos(){const n=new Date(),n0=new Date(n.getFullYear(),n.getMonth(),n.
   const sem=mei.concat(sn).filter(c=>!S.docs.some(d=>d.client===c.id&&d.kind.startsWith('DAS')&&d.comp===comp));
   return `<div class="panel"><h3>Próximos prazos</h3><table class="tbl">${L.map(([t,d,q])=>`<tr><td>${t}</td><td>${d.toLocaleDateString('pt-BR')}</td><td>${dd(d)===0?'hoje':'em '+dd(d)+' dias'}</td><td>${q} cliente(s)</td></tr>`).join('')}</table>
   ${sem.length?`<p class="note" style="margin-top:12px"><b>Sem guia DAS anexada da competência ${comp.slice(5)}/${comp.slice(0,4)}:</b> ${sem.map(c=>esc(c.name)).join(', ')}. <a href="#" onclick="go('guias');return false">Anexar guia</a></p>`:'<p class="note" style="margin-top:12px">Todos os clientes têm a guia do mês anexada.</p>'}<p class="note">Feriados nacionais não são considerados nas datas.</p></div>`}
-function gerarMes(){const n=new Date(),mes=n.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}),due=today().slice(0,8)+String(Math.min(28,+S.cfg.venc||10)).padStart(2,'0');let k=0;
-  S.clients.filter(c=>c.status!=='Inativo'&&+c.fee>0).forEach(c=>{const desc='Honorários '+mes;if(S.fees.some(f=>f.client===c.id&&f.desc===desc))return;S.fees.push({id:uid(),client:c.id,desc,value:+c.fee,due,paid:false});k++});save();render();toast(k?k+' honorário(s) gerado(s)':'Nada novo para gerar')}
+function gerarMes(){const mes=today().slice(0,7),nome=mesNome(),k=pendRec();
+  k.forEach(c=>{const d=Math.min(28,+c.payday||+S.cfg.venc||10);S.fees.push({id:uid(),client:c.id,desc:'Honorários '+nome,value:+c.fee,due:mes+'-'+String(d).padStart(2,'0'),paid:false,pay:c.pay||'Pix',rec:true,mes})});
+  save();render();toast(k.length?k.length+' honorário(s) gerado(s)':'Nada novo para gerar')}
 function recibo(id){const f=S.fees.find(x=>x.id===id),c=S.clients.find(x=>x.id===f.client)||{},g=S.cfg;
-  $('rec').innerHTML=`<div class="recbox"><p class="brand" style="color:var(--cu)">AC Contábil</p><h2>Recibo de honorários</h2><p>Recebi de <b>${esc(c.name)}</b> ${c.doc?'(CPF/CNPJ '+esc(c.doc)+')':''} a quantia de <b>${R(f.value)}</b>, referente a ${esc(f.desc)}.</p><p>Emitido em ${new Date().toLocaleDateString('pt-BR')}.</p><p style="margin-top:44px">______________________________<br>${esc(g.office||(A&&A.name)||'')}${g.crc?'<br>CRC '+esc(g.crc):''}${g.doc?'<br>'+esc(g.doc):''}</p><div class="noprint"><button class="btn" onclick="window.print()">Imprimir ou salvar em PDF</button> <button class="btn alt" onclick="$('rec').style.display='none'">Fechar</button></div></div>`;$('rec').style.display='block'}
-function saveCfg(){S.cfg={office:$('gf').value.trim(),crc:$('gc').value.trim(),doc:$('gd').value.trim(),venc:+$('gv').value||10};save();toast('Configurações salvas')}
-function restaurar(i){const f=i.files[0];if(!f)return;f.text().then(t=>{try{const o=JSON.parse(t);if(!Array.isArray(o.clients))throw 0;S=Object.assign({clients:[],fees:[],tasks:{},prices:{},docs:[],cfg:{}},o);save();render();toast('Cópia restaurada')}catch(e){toast('Arquivo de cópia inválido')}})}
+  $('rec').innerHTML=`<div class="recbox"><p class="brand" style="color:var(--cu)">AC Contábil</p><h2>Recibo de honorários</h2><p>Recebi de <b>${esc(c.name)}</b> ${c.doc?'(CPF/CNPJ '+esc(c.doc)+')':''} a quantia de <b>${R(f.value)}</b>, referente a ${esc(f.desc)}.${f.pay?' Forma de pagamento: '+esc(f.pay)+'.':''}</p><p>Emitido em ${new Date().toLocaleDateString('pt-BR')}.</p><p style="margin-top:44px">______________________________<br>${esc(g.office||(A&&A.name)||'')}${g.crc?'<br>CRC '+esc(g.crc):''}${g.doc?'<br>'+esc(g.doc):''}</p><div class="noprint"><button class="btn" onclick="window.print()">Imprimir ou salvar em PDF</button> <button class="btn alt" onclick="$('rec').style.display='none'">Fechar</button></div></div>`;$('rec').style.display='block'}
+function saveCfg(){Object.assign(S.cfg,{office:$('gf').value.trim(),crc:$('gc').value.trim(),doc:$('gd').value.trim(),venc:+$('gv').value||10});save();toast('Configurações salvas')}
+function savePix(){const t=$('xt').value,k=$('xk').value.trim(),d=k.replace(/\D/g,'');
+ const ok=!k||(t==='cpf'?d.length===11:t==='cnpj'?d.length===14:t==='tel'?d.length>=10&&d.length<=13:t==='email'?/^\S+@\S+\.\S+$/.test(k):k.length>=32);
+ if(!ok)return toast('Chave Pix inválida para o tipo escolhido');
+ Object.assign(S.cfg,{pixT:t,pix:k,pixName:$('xn').value.trim(),pixCity:$('xc').value.trim(),payInfo:$('xi').value.trim()});save();toast('Recebimento salvo')}
+function restaurar(i){const f=i.files[0];i.value='';if(!f)return;if(!confirm('Restaurar "'+f.name+'"? Os dados atuais serão substituídos.'))return;f.text().then(t=>{try{const o=JSON.parse(t);if(!Array.isArray(o.clients))throw 0;S=Object.assign({clients:[],fees:[],tasks:{},prices:{},docs:[],cfg:{}},o);save();render();toast('Cópia restaurada')}catch(e){toast('Arquivo de cópia inválido')}})}
 function enter(){document.body.classList.add('in');$('who').innerHTML=`<b class="wn">${esc(A.name)}</b><span class="we">${esc(A.email)}</span><button class="btn alt sm" onclick="sair()">Sair</button>`;tab='painel';render();window.scrollTo(0,0);toast(saud()+(first()?', '+first():'')+'!')}
 
 let last={clients:{},fees:{},docs:{},meta:''},st=null,pendingName='';

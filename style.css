@@ -53,3 +53,8 @@ input,select{font-size:16px;padding:11px 10px}.btn{padding:11px 16px}.btn.sm{pad
 .seg button.on{background:var(--cu);color:#fff}
 .lcard label.show{display:flex;align-items:center;gap:6px;margin:2px 0 8px}.lcard label.show input{width:auto;margin:0}
 .btn:disabled{opacity:.6;cursor:wait}
+.actions{display:flex;flex-wrap:wrap;gap:10px}
+.filebtn{position:relative;display:inline-block;margin:0;font-size:14px;line-height:1.5;text-align:center;overflow:hidden}
+.filebtn input{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;opacity:0;cursor:pointer;border:0}
+.filebtn:hover{background:var(--cu);color:#fff}.filebtn:focus-within{outline:2px solid var(--cu);outline-offset:2px}
+@media (max-width:760px){.actions .btn{flex:1 1 140px}}
