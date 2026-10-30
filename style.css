@@ -86,3 +86,24 @@ input,select{font-size:16px;padding:11px 10px}.btn{padding:11px 16px}.btn.sm{pad
 .nfse-actions{margin-top:24px;text-align:center}
 @media(max-width:600px){.nfse-sheet{padding:24px 18px;min-height:0}.nfse-parties{grid-template-columns:1fr}.nfse-head h1{font-size:26px}.nfse-table th,.nfse-table td{padding:9px 7px;font-size:12px}.nfse-table th:last-child,.nfse-table td:last-child{width:auto}.nfse-card{min-height:0}}
 @media print{.nfse-sheet{max-width:none;min-height:0;margin:0;padding:14mm;border:0;box-shadow:none;font-size:11pt}.nfse-head,.nfse-parties,.nfse-meta,.nfse-table,.nfse-total,.nfse-foot{break-inside:avoid}.nfse-foot{margin-top:34mm}.nfse-actions{display:none}}
+
+.welcome-shell{width:min(1120px,100%);min-height:min(700px,calc(100vh - 40px));display:grid;grid-template-columns:1.2fr .8fr;overflow:hidden;border:1px solid var(--line);border-radius:22px;background:var(--panel);box-shadow:0 24px 80px rgba(60,30,15,.14)}
+.welcome-hero{display:flex;flex-direction:column;padding:clamp(28px,6vw,72px);background:radial-gradient(circle at 12% 90%,rgba(215,154,124,.14),transparent 38%),var(--panel)}
+.welcome-brand{display:flex;align-items:center;gap:14px}
+.welcome-monogram{width:56px;height:56px;display:grid;place-items:center;border:1px solid #d6a184;border-radius:50%;background:linear-gradient(145deg,#512f22,#2e1b13);color:#f1c4aa;font:500 28px/1 "Cormorant Garamond",Georgia,serif;box-shadow:0 6px 18px rgba(43,24,16,.14)}
+.welcome-wordmark{font:500 19px/1.1 "Cormorant Garamond",Georgia,serif;letter-spacing:.03em;color:var(--ink)}
+.welcome-wordmark b{display:block;margin-top:4px;font:500 9px/1.2 Jost,Arial,sans-serif;letter-spacing:.24em;color:var(--mute)}
+.welcome-copy{max-width:560px;margin:auto 0;padding:56px 0 48px}
+.welcome-kicker{font-size:11px;letter-spacing:.18em;color:var(--cu);font-weight:500}
+.welcome-copy h1{max-width:540px;margin:14px 0 15px;font:600 clamp(40px,5vw,60px)/.98 "Cormorant Garamond",Georgia,serif;letter-spacing:-.02em;color:var(--ink)}
+.welcome-copy p{max-width:450px;margin:0;color:var(--mute);font-size:17px}
+.welcome-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+.welcome-bottom{display:flex;align-items:center;gap:12px;color:var(--mute);font-size:12px;letter-spacing:.04em}
+.welcome-bottom i{width:4px;height:4px;border-radius:50%;background:var(--cu2)}
+.welcome-side{position:relative;align-self:stretch;height:auto;min-height:0;display:grid;place-items:center;overflow:hidden;background:linear-gradient(155deg,#47291e,#25150f 72%);color:#f3e4da}
+.welcome-orbit{position:absolute;border:1px solid rgba(232,178,150,.18);border-radius:50%;aspect-ratio:1}
+.orbit-one{width:min(76%,440px);transform:translate(10%,4%)}.orbit-two{width:min(54%,310px);transform:translate(-12%,-6%);border-color:rgba(232,178,150,.28)}
+.welcome-note{position:relative;width:220px;height:220px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid rgba(232,178,150,.4);border-radius:50%;background:radial-gradient(circle,rgba(232,178,150,.13),rgba(58,33,24,.18) 70%);text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.15)}
+.welcome-note span{font:500 88px/.9 "Cormorant Garamond",Georgia,serif;color:#e8b296;letter-spacing:-.08em}
+.welcome-note p{max-width:150px;margin:10px 0 0;color:#f3e4da;font-size:12px;letter-spacing:.04em}
+@media(max-width:760px){.welcome-shell{grid-template-columns:1fr;min-height:calc(100vh - 40px);border-radius:16px}.welcome-hero{padding:30px 24px}.welcome-copy{padding:54px 0;margin:auto 0}.welcome-side{min-height:170px;height:170px}.welcome-note{width:128px;height:128px}.welcome-note span{font-size:52px}.welcome-note p{font-size:10px;margin-top:5px}.orbit-one{width:210px}.orbit-two{width:150px}.welcome-bottom{font-size:11px;gap:8px}}
